@@ -13,6 +13,7 @@ use App\Services\AuditService;
 use App\Services\ReportService;
 use App\Services\PdfService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class InterventionController extends Controller
 {
@@ -26,12 +27,12 @@ class InterventionController extends Controller
         $this->reportService = $reportService;
         $this->pdfService = $pdfService;
         $this->middleware('auth');
-        $this->middleware('permission:create_intervention')->only(['store']);
-        $this->middleware('permission:update_own_intervention')->only(['update']);
     }
 
     public function index()
     {
+        Gate::authorize('viewAny', Intervention::class);
+        
         $user = auth()->user();
         
         // Si l'utilisateur n'est pas admin, il ne voit que ses propres interventions
@@ -66,6 +67,8 @@ class InterventionController extends Controller
 
     public function create()
     {
+        Gate::authorize('create', Intervention::class);
+        
         $sites = Site::orderBy('nom')->get();
         $forages = Forage::orderBy('nom')->get();
         $users = User::orderBy('name')->get();
@@ -76,6 +79,8 @@ class InterventionController extends Controller
 
     public function store(StoreInterventionRequest $request)
     {
+        Gate::authorize('create', Intervention::class);
+        
         $validated = $request->validated();
         
         DB::beginTransaction();
@@ -131,12 +136,7 @@ class InterventionController extends Controller
 
     public function show(Intervention $intervention)
     {
-        $user = auth()->user();
-        
-        // Vérifier les permissions d'accès
-        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
-            abort(403, 'Accès non autorisé à cette intervention.');
-        }
+        Gate::authorize('view', $intervention);
         
         $intervention->load(['site.commune', 'forage', 'user', 'pieces']);
         return view('interventions.show', compact('intervention'));
@@ -144,12 +144,7 @@ class InterventionController extends Controller
 
     public function edit(Intervention $intervention)
     {
-        $user = auth()->user();
-        
-        // Vérifier les permissions d'accès
-        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
-            abort(403, 'Accès non autorisé à cette intervention.');
-        }
+        Gate::authorize('update', $intervention);
         
         $sites = Site::orderBy('nom')->get();
         $forages = Forage::orderBy('nom')->get();
@@ -161,12 +156,7 @@ class InterventionController extends Controller
 
     public function update(Request $request, Intervention $intervention)
     {
-        $user = auth()->user();
-        
-        // Vérifier les permissions
-        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
-            abort(403, 'Vous ne pouvez modifier que vos propres interventions.');
-        }
+        Gate::authorize('update', $intervention);
         
         $validated = $request->validate([
             'site_id' => 'required|exists:sites,id',
@@ -189,12 +179,7 @@ class InterventionController extends Controller
 
     public function destroy(Intervention $intervention)
     {
-        $user = auth()->user();
-        
-        // Seul l'admin ou le créateur peut supprimer
-        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
-            abort(403, 'Accès non autorisé.');
-        }
+        Gate::authorize('delete', $intervention);
         
         DB::beginTransaction();
         try {
@@ -224,12 +209,7 @@ class InterventionController extends Controller
 
     public function exportPdf(Intervention $intervention)
     {
-        $user = auth()->user();
-        
-        // Vérifier les permissions d'accès
-        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
-            abort(403, 'Accès non autorisé à cette intervention.');
-        }
+        Gate::authorize('exportPdf', $intervention);
         
         $data = [
             'intervention' => $intervention->load(['site', 'forage', 'user', 'pieces']),

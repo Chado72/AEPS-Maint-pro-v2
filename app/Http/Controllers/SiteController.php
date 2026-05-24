@@ -10,6 +10,7 @@ use App\Http\Requests\UpdateSiteRequest;
 use App\Services\AuditService;
 use App\Services\ReportService;
 use App\Services\PdfService;
+use Illuminate\Support\Facades\Gate;
 
 class SiteController extends Controller
 {
@@ -22,10 +23,13 @@ class SiteController extends Controller
         $this->auditService = $auditService;
         $this->reportService = $reportService;
         $this->pdfService = $pdfService;
+        $this->middleware('auth');
     }
 
     public function index()
     {
+        Gate::authorize('viewAny', Site::class);
+        
         $sites = Site::with(['commune', 'village', 'forages'])
             ->orderBy('nom')
             ->paginate(15);
@@ -43,6 +47,8 @@ class SiteController extends Controller
 
     public function create()
     {
+        Gate::authorize('create', Site::class);
+        
         $communes = Commune::orderBy('nom')->get();
         $villages = Village::orderBy('nom')->get();
         return view('sites.create', compact('communes', 'villages'));
@@ -50,6 +56,8 @@ class SiteController extends Controller
 
     public function store(StoreSiteRequest $request)
     {
+        Gate::authorize('create', Site::class);
+        
         $site = Site::create($request->validated());
         
         $this->auditService->log('create', 'Site', $site->id, ['nom' => $site->nom, 'type' => $site->type]);
@@ -60,12 +68,16 @@ class SiteController extends Controller
 
     public function show(Site $site)
     {
+        Gate::authorize('view', $site);
+        
         $site->load(['commune', 'village', 'forages.energySources', 'interventions.user', 'documents']);
         return view('sites.show', compact('site'));
     }
 
     public function edit(Site $site)
     {
+        Gate::authorize('update', $site);
+        
         $communes = Commune::orderBy('nom')->get();
         $villages = Village::orderBy('nom')->get();
         return view('sites.edit', compact('site', 'communes', 'villages'));
@@ -73,6 +85,8 @@ class SiteController extends Controller
 
     public function update(UpdateSiteRequest $request, Site $site)
     {
+        Gate::authorize('update', $site);
+        
         $site->update($request->validated());
         
         $this->auditService->log('update', 'Site', $site->id, ['nom' => $site->nom]);
@@ -83,6 +97,8 @@ class SiteController extends Controller
 
     public function destroy(Site $site)
     {
+        Gate::authorize('delete', $site);
+        
         if ($site->forages()->count() > 0 || $site->interventions()->count() > 0) {
             return redirect()->route('sites.index')
                 ->with('error', 'Impossible de supprimer ce site car il contient des forages ou des interventions.');
@@ -98,6 +114,8 @@ class SiteController extends Controller
 
     public function exportPdf(Site $site)
     {
+        Gate::authorize('exportPdf', $site);
+        
         $data = $this->reportService->getSiteReport($site->id);
         return $this->pdfService->generate('pdf.site', $data, 'site_' . $site->nom);
     }

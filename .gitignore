@@ -2,11 +2,12 @@
 # Compiled and build artifacts
 *.pyc
 __pycache__/
+*.o
+*.obj
 
 # Dependencies
 vendor/
 node_modules/
-composer.lock
 
 # Logs and temp files
 *.log
@@ -16,7 +17,7 @@ composer.lock
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
 
 # Editors
 .vscode/
@@ -32,21 +33,6 @@ storage/logs/
 storage/framework/
 public/storage/
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Distribution / packaging
-dist/
-build/
-*.tar.gz
-*.zip
-
-# IDE
-*.swp
-*.swo
-
-# Testing
-.phpunit.result.cache
+# Composer
+composer.lock
 ```
