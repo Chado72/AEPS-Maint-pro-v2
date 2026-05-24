@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SparePart;
 use Illuminate\Http\Request;
 use App\Services\AuditService;
+use Illuminate\Support\Facades\DB;
 
 class SparePartController extends Controller
 {
@@ -13,6 +14,8 @@ class SparePartController extends Controller
     public function __construct(AuditService $auditService)
     {
         $this->auditService = $auditService;
+        $this->middleware('auth');
+        $this->middleware('permission:manage_stock')->only(['store', 'update', 'destroy']);
     }
 
     public function index()
