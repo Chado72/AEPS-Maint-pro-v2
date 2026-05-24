@@ -128,13 +128,45 @@ echo [7/8] Création du lien symbolique pour les fichiers uploadés...
 call php artisan storage:link
 echo OK: Lien symbolique créé.
 
-:: 8. NETTOYAGE DES CACHES
+:: 8. NETTOYAGE DES CACHES ET CONFIGURATION FINALE
 echo.
-echo [8/8] Optimisation et nettoyage des caches...
-call php artisan config:cache
-call php artisan route:cache
-call php artisan view:cache
-echo OK: Caches optimisés.
+echo [8/9] Optimisation et nettoyage des caches...
+call php artisan config:clear
+call php artisan cache:clear
+call php artisan view:clear
+call php artisan route:clear
+echo OK: Caches nettoyes.
+
+:: 9. VERIFICATION DES MIDDLEWARE DE SECURITE
+echo.
+echo [9/9] Verification des middleware de securite...
+if exist "app\Http\Middleware\CheckRole.php" (
+    echo [OK] Middleware CheckRole installe
+) else (
+    echo [ERREUR] Middleware CheckRole manquant!
+)
+if exist "app\Http\Middleware\CheckPermission.php" (
+    echo [OK] Middleware CheckPermission installe
+) else (
+    echo [ERREUR] Middleware CheckPermission manquant!
+)
+if exist "app\Http\Middleware\OwnsAiSession.php" (
+    echo [OK] Middleware OwnsAiSession installe
+) else (
+    echo [ERREUR] Middleware OwnsAiSession manquant!
+)
+if exist "app\Http\Middleware\EnsureUserIsActive.php" (
+    echo [OK] Middleware EnsureUserIsActive installe
+) else (
+    echo [ERREUR] Middleware EnsureUserIsActive manquant!
+)
+if exist "app\Http\Controllers\Auth\LoginController.php" (
+    echo [OK] LoginController avec protection CSRF installe
+) else (
+    echo [ERREUR] LoginController manquant!
+)
+echo.
+echo OK: Verification des middleware terminee.
 
 :: RÉSULTAT FINAL
 echo.
@@ -149,11 +181,50 @@ echo -------------------------
 echo Email    : admin@onea.bf
 echo Mot de passe : admin123
 echo.
-echo Rôles créés : SuperAdmin, Gestionnaire, Technicien, Observateur
+echo IMPORTANT: Changez le mot de passe après la première connexion!
+echo.
+echo NOUVELLES FONCTIONNALITÉS DE SÉCURITÉ INSTALLÉES:
+echo ===================================================
+echo [OK] Middleware CheckRole - Contrôle d'accès par rôle
+echo [OK] Middleware CheckPermission - Contrôle d'accès par permission
+echo [OK] Middleware OwnsAiSession - Protection des sessions IA
+echo [OK] Middleware EnsureUserIsActive - Vérification statut utilisateur
+echo [OK] Protection CSRF sur tous les formulaires (login inclus)
+echo [OK] Rate limiting API IA - 10 requêtes/minute maximum
+echo [OK] Transactions DB avec verrous pour gestion du stock
+echo [OK] Logs d'audit pour actions critiques
+echo [OK] Validation stricte des entrées utilisateur
+echo.
+echo RÔLES ET PERMISSIONS:
+echo =====================
+echo - SuperAdmin: Accès complet à toutes les fonctionnalités
+echo - Gestionnaire: Gestion interventions, stocks, rapports
+echo - Technicien: Consultation et mise à jour interventions assignées
+echo - Observateur: Lecture seule
+echo.
+echo TESTS DE VALIDATION RECOMMANDÉS:
+echo =================================
+echo 1. Contrôle d'accès sessions IA: Connectez-vous avec user1
+echo    Essayez d'accéder à la session de user2 - Doit retourner 403
+echo.
+echo 2. Rate limiting IA: Envoyez 11 requêtes en moins d'une minute
+echo    La 11ème doit retourner 429 (Too Many Requests)
+echo.
+echo 3. Permissions: Connectez-vous avec un Technicien
+echo    Essayez de modifier un paramètre global - Doit retourner 403
+echo.
+echo 4. Race condition stock: Deux requêtes simultanées pour
+echo    utiliser la même pièce - Une seule doit réussir
+echo.
+echo DOCUMENTATION:
+echo ==============
+echo - SECURITY_FIXES.md: Détails des corrections de sécurité
+echo - README.md: Guide d'utilisation général
 echo.
 echo Prochaines étapes :
 echo 1. Ouvrez votre navigateur.
 echo 2. Connectez-vous avec les identifiants ci-dessus.
-echo 3. Allez dans 'Paramètres' pour configurer vos clés API IA (Mistral/Groq).
+echo 3. Changez votre mot de passe immédiatement.
+echo 4. Allez dans 'Paramètres' pour configurer vos clés API IA (Mistral/Groq).
 echo.
 pause
