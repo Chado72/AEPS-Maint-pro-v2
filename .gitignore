@@ -1,27 +1,52 @@
 ```
-# Dependency directories
-vendor/
-composer.lock
-
-# Environment
+# Environment variables
 .env
 .env.local
 .env.*
 
+# Laravel-specific ignores
+vendor/
+storage/
+bootstrap/cache/
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compiled and build artifacts
+*.php~
+*.blade.php~
+
 # Logs
 *.log
+storage/logs/*
 
-# IDE
+# Editor/IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
 
-# PHP
-*.php~
-phpunit.xml
-.coverage
+# Coverage reports
 coverage/
+htmlcov/
+*.coverage
+
+# Build outputs
+dist/
+build/
+target/
+
+# Python cache (if any Python files exist in project)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 ```
