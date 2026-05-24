@@ -1,0 +1,27 @@
+```
+# Dependency directories
+vendor/
+composer.lock
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PHP
+*.php~
+phpunit.xml
+.coverage
+coverage/
+```
