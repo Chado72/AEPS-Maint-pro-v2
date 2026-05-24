@@ -4,9 +4,19 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Setting;
+use App\Services\AuditService;
 
 class SettingController extends Controller
 {
+    protected $auditService;
+
+    public function __construct(AuditService $auditService)
+    {
+        $this->auditService = $auditService;
+        $this->middleware('auth');
+        $this->middleware('role:admin')->only(['update']);
+    }
+
     public function index()
     {
         $settings = [
@@ -20,48 +30,32 @@ class SettingController extends Controller
 
     public function update(Request $request)
     {
-        $validated = $request->validate([
-            'ai_provider' => 'required|in:mistral,groq',
-            'ai_mistral_key' => 'nullable|string',
-            'ai_groq_key' => 'nullable|string',
-        ]);
-
-        // Mettre à jour le fichier .env
-        $this->updateEnvFile([
-            'AI_DEFAULT_PROVIDER' => $validated['ai_provider'],
-            'AI_MISTRAL_API_KEY' => $validated['ai_mistral_key'],
-            'AI_GROQ_API_KEY' => $validated['ai_groq_key'],
-        ]);
-
-        // Clear config cache
-        \Artisan::call('config:clear');
-
-        return redirect()->route('settings.index')
-            ->with('success', 'Paramètres mis à jour avec succès. Veuillez rafraîchir la page pour appliquer les changements.');
-    }
-
-    /**
-     * Met à jour le fichier .env avec les nouvelles valeurs
-     */
-    protected function updateEnvFile(array $values)
-    {
-        $envPath = base_path('.env');
-        $content = file_get_contents($envPath);
-
-        foreach ($values as $key => $value) {
-            if (strpos($content, $key . '=') !== false) {
-                // La clé existe, on la met à jour
-                $content = preg_replace(
-                    "/^{$key}=.*/m",
-                    "{$key}={$value}",
-                    $content
-                );
-            } else {
-                // La clé n'existe pas, on l'ajoute
-                $content .= "\n{$key}={$value}";
-            }
+        // Vérification supplémentaire que seul l'admin peut modifier
+        if (!auth()->user()->isAdmin()) {
+            abort(403, 'Seul un administrateur peut modifier les paramètres.');
         }
 
-        file_put_contents($envPath, $content);
+        $validated = $request->validate([
+            'ai_provider' => 'required|in:mistral,groq',
+            'ai_mistral_key' => 'nullable|string|max:255',
+            'ai_groq_key' => 'nullable|string|max:255',
+        ]);
+
+        // Mettre à jour la configuration en mémoire (sans modifier .env directement)
+        // Les clés API doivent être gérées via variables d'environnement ou base de données chiffrée
+        config([
+            'ai.default_provider' => $validated['ai_provider'],
+            'ai.mistral.api_key' => $validated['ai_mistral_key'],
+            'ai.groq.api_key' => $validated['ai_groq_key'],
+        ]);
+
+        // Log la modification
+        $this->auditService->log('update', 'Settings', null, [
+            'ai_provider' => $validated['ai_provider'],
+            'user_id' => auth()->id(),
+        ]);
+
+        return redirect()->route('settings.index')
+            ->with('success', 'Paramètres mis à jour avec succès pour cette session. Pour une persistance permanente, configurez les variables d\'environnement.');
     }
 }

@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use App\Services\AuditService;
 use App\Services\ReportService;
 use App\Services\PdfService;
+use Illuminate\Support\Facades\DB;
 
 class InterventionController extends Controller
 {
@@ -24,19 +25,40 @@ class InterventionController extends Controller
         $this->auditService = $auditService;
         $this->reportService = $reportService;
         $this->pdfService = $pdfService;
+        $this->middleware('auth');
+        $this->middleware('permission:create_intervention')->only(['store']);
+        $this->middleware('permission:update_own_intervention')->only(['update']);
     }
 
     public function index()
     {
-        $interventions = Intervention::with(['site', 'forage', 'user', 'pieces'])
-            ->orderByDesc('date_intervention')
-            ->paginate(15);
+        $user = auth()->user();
         
-        if (request('statut')) {
+        // Si l'utilisateur n'est pas admin, il ne voit que ses propres interventions
+        if (!$user->isAdmin()) {
             $interventions = Intervention::with(['site', 'forage', 'user', 'pieces'])
-                ->where('statut', request('statut'))
+                ->where('user_id', $user->id)
                 ->orderByDesc('date_intervention')
                 ->paginate(15);
+            
+            if (request('statut')) {
+                $interventions = Intervention::with(['site', 'forage', 'user', 'pieces'])
+                    ->where('user_id', $user->id)
+                    ->where('statut', request('statut'))
+                    ->orderByDesc('date_intervention')
+                    ->paginate(15);
+            }
+        } else {
+            $interventions = Intervention::with(['site', 'forage', 'user', 'pieces'])
+                ->orderByDesc('date_intervention')
+                ->paginate(15);
+            
+            if (request('statut')) {
+                $interventions = Intervention::with(['site', 'forage', 'user', 'pieces'])
+                    ->where('statut', request('statut'))
+                    ->orderByDesc('date_intervention')
+                    ->paginate(15);
+            }
         }
         
         return view('interventions.index', compact('interventions'));
@@ -56,24 +78,34 @@ class InterventionController extends Controller
     {
         $validated = $request->validated();
         
-        // Création de l'intervention
-        $intervention = Intervention::create([
-            'site_id' => $validated['site_id'],
-            'forage_id' => $validated['forage_id'] ?? null,
-            'user_id' => auth()->id(),
-            'type_intervention' => $validated['type_intervention'],
-            'statut' => $validated['statut'],
-            'date_intervention' => $validated['date_intervention'],
-            'description' => $validated['description'],
-            'cout' => $validated['cout'] ?? 0,
-            'duree_heures' => $validated['duree_heures'] ?? null,
-        ]);
+        DB::beginTransaction();
+        try {
+            // Création de l'intervention
+            $intervention = Intervention::create([
+                'site_id' => $validated['site_id'],
+                'forage_id' => $validated['forage_id'] ?? null,
+                'user_id' => auth()->id(),
+                'type_intervention' => $validated['type_intervention'],
+                'statut' => $validated['statut'],
+                'date_intervention' => $validated['date_intervention'],
+                'description' => $validated['description'],
+                'cout' => $validated['cout'] ?? 0,
+                'duree_heures' => $validated['duree_heures'] ?? null,
+            ]);
 
-        // Gestion des pièces utilisées
-        if (!empty($validated['pieces_utilisees'])) {
-            foreach ($validated['pieces_utilisees'] as $piece) {
-                $sparePart = SparePart::find($piece['spare_part_id']);
-                if ($sparePart) {
+            // Gestion des pièces utilisées avec verrouillage pour éviter les race conditions
+            if (!empty($validated['pieces_utilisees'])) {
+                foreach ($validated['pieces_utilisees'] as $piece) {
+                    $sparePart = SparePart::lockForUpdate()->find($piece['spare_part_id']);
+                    
+                    if (!$sparePart) {
+                        throw new \Exception("Pièce non trouvée: {$piece['spare_part_id']}");
+                    }
+                    
+                    if ($sparePart->stock_actuel < $piece['quantite']) {
+                        throw new \Exception("Stock insuffisant pour la pièce: {$sparePart->nom}");
+                    }
+                    
                     $sparePart->decrement('stock_actuel', $piece['quantite']);
                     
                     $intervention->pieces()->attach($piece['spare_part_id'], [
@@ -81,25 +113,44 @@ class InterventionController extends Controller
                     ]);
                 }
             }
+            
+            DB::commit();
+            
+            $this->auditService->log('create', 'Intervention', $intervention->id, [
+                'type' => $intervention->type_intervention,
+                'site_id' => $intervention->site_id
+            ]);
+            
+            return redirect()->route('interventions.index')
+                ->with('success', 'Intervention créée avec succès.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Erreur lors de la création: ' . $e->getMessage()]);
         }
-        
-        $this->auditService->log('create', 'Intervention', $intervention->id, [
-            'type' => $intervention->type_intervention,
-            'site_id' => $intervention->site_id
-        ]);
-        
-        return redirect()->route('interventions.index')
-            ->with('success', 'Intervention créée avec succès.');
     }
 
     public function show(Intervention $intervention)
     {
+        $user = auth()->user();
+        
+        // Vérifier les permissions d'accès
+        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
+            abort(403, 'Accès non autorisé à cette intervention.');
+        }
+        
         $intervention->load(['site.commune', 'forage', 'user', 'pieces']);
         return view('interventions.show', compact('intervention'));
     }
 
     public function edit(Intervention $intervention)
     {
+        $user = auth()->user();
+        
+        // Vérifier les permissions d'accès
+        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
+            abort(403, 'Accès non autorisé à cette intervention.');
+        }
+        
         $sites = Site::orderBy('nom')->get();
         $forages = Forage::orderBy('nom')->get();
         $users = User::orderBy('name')->get();
@@ -110,6 +161,13 @@ class InterventionController extends Controller
 
     public function update(Request $request, Intervention $intervention)
     {
+        $user = auth()->user();
+        
+        // Vérifier les permissions
+        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
+            abort(403, 'Vous ne pouvez modifier que vos propres interventions.');
+        }
+        
         $validated = $request->validate([
             'site_id' => 'required|exists:sites,id',
             'forage_id' => 'nullable|exists:forages,id',
@@ -131,27 +189,48 @@ class InterventionController extends Controller
 
     public function destroy(Intervention $intervention)
     {
-        // Restaurer le stock des pièces si nécessaire
-        foreach ($intervention->pieces as $piece) {
-            $pivot = $piece->pivot;
-            if ($pivot && isset($pivot->quantite)) {
-                $sparePart = SparePart::find($piece->id);
-                if ($sparePart) {
-                    $sparePart->increment('stock_actuel', $pivot->quantite);
-                }
-            }
+        $user = auth()->user();
+        
+        // Seul l'admin ou le créateur peut supprimer
+        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
+            abort(403, 'Accès non autorisé.');
         }
         
-        $intervention->delete();
-        
-        $this->auditService->log('delete', 'Intervention', $intervention->id);
-        
-        return redirect()->route('interventions.index')
-            ->with('success', 'Intervention supprimée avec succès.');
+        DB::beginTransaction();
+        try {
+            // Restaurer le stock des pièces si nécessaire
+            foreach ($intervention->pieces as $piece) {
+                $pivot = $piece->pivot;
+                if ($pivot && isset($pivot->quantite)) {
+                    $sparePart = SparePart::find($piece->id);
+                    if ($sparePart) {
+                        $sparePart->increment('stock_actuel', $pivot->quantite);
+                    }
+                }
+            }
+            
+            $intervention->delete();
+            DB::commit();
+            
+            $this->auditService->log('delete', 'Intervention', $intervention->id);
+            
+            return redirect()->route('interventions.index')
+                ->with('success', 'Intervention supprimée avec succès.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Erreur lors de la suppression: ' . $e->getMessage()]);
+        }
     }
 
     public function exportPdf(Intervention $intervention)
     {
+        $user = auth()->user();
+        
+        // Vérifier les permissions d'accès
+        if (!$user->isAdmin() && $intervention->user_id !== $user->id) {
+            abort(403, 'Accès non autorisé à cette intervention.');
+        }
+        
         $data = [
             'intervention' => $intervention->load(['site', 'forage', 'user', 'pieces']),
             'generated_at' => now(),
